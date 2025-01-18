@@ -118,16 +118,26 @@ def show_images(input_images, clean_images, output_images):
 
 def main():
     parser = argparse.ArgumentParser(description="Training DeepEraser model.")
-    parser.add_argument('--img_dir', type=str, default='./train_data/Text', help='Path to text images.')
-    parser.add_argument('--mask_dir', type=str, default='./train_data/Mask', help='Path to mask images.')
-    parser.add_argument('--clean_dir', type=str, default='./train_data/Clear', help='Path to clean images.')
-    parser.add_argument('--save_model_path', type=str, default='./deeperaser1.pth', help='Path to save the model.')
-    parser.add_argument('--rec_model_path', type=str, default='./deeperaser.pth', help='Path to a pretrained model.')
-    parser.add_argument('--batch_size', type=int, default=6, help='Batch size for training.')
-    parser.add_argument('--learning_rate', type=float, default=5e-6, help='Learning rate.')
-    parser.add_argument('--num_epochs', type=int, default=4, help='Number of training epochs.')
-    parser.add_argument('--start_items', type=int, default=0, help='Starting index for dataset.')
-    parser.add_argument('--count_items', type=int, default=1000, help='Number of items in the dataset.')
+    parser.add_argument('--img_dir', type=str, default='./train_data/Text',
+                        help='Path to text images. (default: ./train_data/Text)')
+    parser.add_argument('--mask_dir', type=str, default='./train_data/Mask',
+                        help='Path to mask images. (default: ./train_data/Mask)')
+    parser.add_argument('--clean_dir', type=str, default='./train_data/Clear',
+                        help='Path to clean images. (default: ./train_data/Clear)')
+    parser.add_argument('--save_model_path', type=str, default='./deeperaser1.pth',
+                        help='Path to save the model. (default: ./deeperaser1.pth)')
+    parser.add_argument('--rec_model_path', type=str, default='./deeperaser.pth',
+                        help='Path to a pretrained model. (default: ./deeperaser.pth)')
+    parser.add_argument('--batch_size', type=int, default=6,
+                        help='Batch size for training. (default: 6)')
+    parser.add_argument('--learning_rate', type=float, default=5e-6,
+                        help='Learning rate. (default: 5e-6)')
+    parser.add_argument('--num_epochs', type=int, default=4,
+                        help='Number of training epochs. (default: 4)')
+    parser.add_argument('--start_items', type=int, default=0,
+                        help='Starting index for dataset. (default: 0)')
+    parser.add_argument('--count_items', type=int, default=1000,
+                        help='Number of items in the dataset. (default: 1000)')
 
     args = parser.parse_args()
 
