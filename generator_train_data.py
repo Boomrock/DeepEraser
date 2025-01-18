@@ -5,7 +5,14 @@ from PIL import Image, ImageDraw, ImageFont
 import random
 from tqdm import tqdm
 
+def ensure_directories_exist(path_to_save):
+    """Создает необходимые директории, если они не существуют."""
+    for subdir in ['Clear', 'Mask', 'Text']:
+        os.makedirs(os.path.join(path_to_save, subdir), exist_ok=True)
 
+def get_random_font():
+    font_type = ['NotoSansJP-Bold', 'OtsutomeFont_Ver3_16']
+    return random.choice(font_type)
 
 def crop_random_square(images, width, height):
     img = random.choice(images)
@@ -51,6 +58,7 @@ def add_rectangle_to_image(image, position, size, color):
     draw.rectangle([position, (position[0] + size[0], position[1] + size[1])], fill=color)
 
 def generate_images(n, width, height, text_length, font_path, font_size_range, path_to_save, mangas):
+    ensure_directories_exist(path_to_save)
     for i in tqdm(range(n)):
         font_size = random.randint(font_size_range[0], font_size_range[1])
         noise_image = crop_random_square(mangas, width, height)
@@ -79,7 +87,7 @@ def main():
     parser.add_argument("--font_path", type=str, default="./NotoSansJP-Bold.ttf", help="Путь к файлу шрифта (по умолчанию: ./NotoSansJP-Bold.ttf).")
     parser.add_argument("--font_size_min", type=int, default=10, help="Минимальный размер шрифта (по умолчанию: 10).")
     parser.add_argument("--font_size_max", type=int, default=40, help="Максимальный размер шрифта (по умолчанию: 40).")
-    parser.add_argument("--path_to_save", type=str, default="./train_data/", help="Путь для сохранения изображений (по умолчанию: ./train_data/).")
+    parser.add_argument("--path_to_save", type=str, default="./train_data/", help="Путь для сохранения изображений (по умолчанию: ./DeepEraser/train_data/).")
     parser.add_argument("--manga_path", type=str, default="./clm", help="Путь к изображениям манги (по умолчанию: ./clm).")
 
     args = parser.parse_args()
