@@ -12,7 +12,7 @@ import warnings
 import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
-
+os.system("cls")
 
 class EraserDataset(Dataset):
     def __init__(self, img_dir, mask_dir, clean_dir, transform=None, start_items=0, count_items=1000):
@@ -25,8 +25,8 @@ class EraserDataset(Dataset):
         self.images = []
         self.clean_images = []
         self.masks = []
-
-        for file in self.image_filenames:
+        print("Загрузка тренировочных данных")
+        for file in tqdm(self.image_filenames):
             image = Image.open(os.path.join(self.img_dir, file)).convert("RGB")
             mask = Image.open(os.path.join(self.mask_dir, file)).convert("L")
             clean_image = Image.open(os.path.join(self.clean_dir, file)).convert("RGB")
@@ -141,6 +141,19 @@ def main():
 
     args = parser.parse_args()
 
+    print("Parameters:")
+    print(f"Image Directory: {args.img_dir}")
+    print(f"Mask Directory: {args.mask_dir}")
+    print(f"Clean Directory: {args.clean_dir}")
+    print(f"Save Model Path: {args.save_model_path}")
+    print(f"Pretrained Model Path: {args.rec_model_path}")
+    print(f"Batch Size: {args.batch_size}")
+    print(f"Learning Rate: {args.learning_rate}")
+    print(f"Number of Epochs: {args.num_epochs}")
+    print(f"Starting Index: {args.start_items}")
+    print(f"Count of Items: {args.count_items}")
+
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transform = transforms.Compose([
@@ -161,13 +174,13 @@ def main():
 
     model = DeepEraser().to(device)
     model = reload_rec_model(model, args.rec_model_path)
+    model = nn.DataParallel(model)
 
     criterion = nn.SmoothL1Loss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     trained_model = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
 
-    trained_model = nn.DataParallel(trained_model)
     torch.save(trained_model.state_dict(), args.save_model_path)
 
 
