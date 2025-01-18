@@ -1,0 +1,102 @@
+import os
+import argparse
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import random
+from tqdm import tqdm
+
+
+
+def crop_random_square(images, width, height):
+    img = random.choice(images)
+    width_img, height_img = img.size
+    if width > width_img or height > height_img:
+        raise ValueError("Размер квадрата больше, чем размеры изображения.")
+    x = random.randint(0, width_img - width)
+    y = random.randint(0, height_img - height)
+    cropped_img = img.crop((x, y, x + width, y + height))
+    return cropped_img
+
+def generate_random_japanese_text(length):
+    hiragana_range = (0x3040, 0x309F)
+    katakana_range = (0x30A0, 0x30FF)
+    kanji_range = (0x4E00, 0x9FAF)
+    random_text = []
+    for _ in range(length):
+        char_type = random.choice(['hiragana', 'katakana', 'kanji'])
+        if char_type == 'hiragana':
+            char = chr(random.randint(*hiragana_range))
+        elif char_type == 'katakana':
+            char = chr(random.randint(*katakana_range))
+        else:
+            char = chr(random.randint(*kanji_range))
+        random_text.append(char)
+    return ''.join(random_text)
+
+def generate_noise_image(width, height):
+    noise = np.random.randint(0, 256, (height, width), dtype=np.uint8)
+    return Image.fromarray(noise, mode='L')
+
+def generate_black_image(width, height):
+    black_image = np.zeros((height, width), dtype=np.uint8)
+    return Image.fromarray(black_image, mode='L')
+
+def add_text_to_image(image, text, font_path, font_size, position, text_color):
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(font_path, font_size)
+    draw.text(position, text, fill=text_color, font=font)
+
+def add_rectangle_to_image(image, position, size, color):
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([position, (position[0] + size[0], position[1] + size[1])], fill=color)
+
+def generate_images(n, width, height, text_length, font_path, font_size_range, path_to_save, mangas):
+    for i in tqdm(range(n)):
+        font_size = random.randint(font_size_range[0], font_size_range[1])
+        noise_image = crop_random_square(mangas, width, height)
+        black_image = generate_black_image(width, height)
+        text = generate_random_japanese_text(text_length)
+        text2 = generate_random_japanese_text(text_length)
+        position = (random.randint(-font_size*3, width - font_size*2), random.randint(0 - font_size*2, height))
+        second_line_position = (position[0], position[1] + font_size)
+        text_color = random.randint(0, 60)
+        text_size = (font_size * text_length, font_size)
+        text_size2 = (font_size * text_length, font_size + 10)
+        noise_image.save(f'{path_to_save}/Clear/image_{i + 1}.png')
+        add_rectangle_to_image(black_image, position, text_size, 255)
+        add_rectangle_to_image(black_image, second_line_position, text_size2, 255)
+        add_text_to_image(noise_image, text, font_path, font_size, position, (text_color, text_color, text_color))
+        add_text_to_image(noise_image, text2, font_path, font_size, second_line_position, (text_color, text_color, text_color))
+        black_image.save(f'{path_to_save}/Mask/image_{i + 1}.png')
+        noise_image.save(f'{path_to_save}/Text/image_{i + 1}.png')
+
+def main():
+    parser = argparse.ArgumentParser(description="Генерация изображений с текстом.")
+    parser.add_argument("--n", type=int, default=10000, help="Количество изображений (по умолчанию: 10000).")
+    parser.add_argument("--width", type=int, default=128, help="Ширина изображений (по умолчанию: 128).")
+    parser.add_argument("--height", type=int, default=128, help="Высота изображений (по умолчанию: 128).")
+    parser.add_argument("--text_length", type=int, default=5, help="Длина текста (по умолчанию: 5).")
+    parser.add_argument("--font_path", type=str, default="./NotoSansJP-Bold.ttf", help="Путь к файлу шрифта (по умолчанию: ./NotoSansJP-Bold.ttf).")
+    parser.add_argument("--font_size_min", type=int, default=10, help="Минимальный размер шрифта (по умолчанию: 10).")
+    parser.add_argument("--font_size_max", type=int, default=40, help="Максимальный размер шрифта (по умолчанию: 40).")
+    parser.add_argument("--path_to_save", type=str, default="./train_data/", help="Путь для сохранения изображений (по умолчанию: ./train_data/).")
+    parser.add_argument("--manga_path", type=str, default="./clm", help="Путь к изображениям манги (по умолчанию: ./clm).")
+
+    args = parser.parse_args()
+
+    filenames = os.listdir(args.manga_path)
+    images = [Image.open(os.path.join(args.manga_path, file)) for file in filenames]
+
+    generate_images(
+        args.n,
+        args.width,
+        args.height,
+        args.text_length,
+        args.font_path,
+        (args.font_size_min, args.font_size_max),
+        args.path_to_save,
+        images
+    )
+
+if __name__ == "__main__":
+    main()

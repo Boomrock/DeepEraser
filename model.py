@@ -24,7 +24,6 @@ class DeepEraser(nn.Module):
         image1 = image1.contiguous()
         
         image2 = torch.cat([image1, mask], dim = 1)
-
         hdim = self.hidden_dim
         cdim = self.context_dim
         fmap1 = self.fnet(image2)

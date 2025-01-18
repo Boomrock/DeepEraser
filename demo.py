@@ -17,9 +17,9 @@ def reload_rec_model(model, path=""):
     else:
         model_dict = model.state_dict()
         pretrained_dict = torch.load(path, map_location='cuda:0')
-        # print(len(pretrained_dict.keys()))
+        print(len(pretrained_dict.keys()))
         pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
-        # print(len(pretrained_dict.keys()))
+        print(len(pretrained_dict.keys()))
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
 
@@ -37,23 +37,40 @@ def rec(rec_model_path, img_path, save_path):
 
     net.eval()
 
-    img = np.array(Image.open(img_path+'input.jpg'))[:, :, :3]   
-    mask = np.array(Image.open(img_path+'mask.png'))[:, :]
-    
+    # Задайте новый размер
+    new_size = (600, 800)  # Замените width и height на нужные значения
 
+    # Загрузка изображения и маски
+    img = Image.open(img_path + 'input.png').convert('RGB')  # Убираем альфа-канал
+    mask = Image.open(img_path + 'mask.png').convert('L')  # Преобразуем маску в градации серого
+
+    # Уменьшение размера
+    img = img.resize(new_size, Image.LANCZOS)  # Изменяем размер изображения
+    mask = mask.resize(new_size, Image.LANCZOS)  # Изменяем размер маски (используем NEAREST для маски)
+
+    # Преобразование в numpy массивы
+    img = np.array(img)[:, :, :3]  # Убедитесь, что только RGB каналы
+    mask = np.array(mask)[:, :]  # Маска без изменений
+
+    # Преобразование в тензоры PyTorch
     im = torch.from_numpy(img / 255.0).permute(2, 0, 1).float()
     mask = torch.from_numpy(mask / 255.0).unsqueeze(0).float()
-    
+
     with torch.no_grad():
-    
+
         name = 'output'
+
         pred_img = net(im.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda())
-        pred_img[-1] = torch.clamp(pred_img[-1], 0, 1)
-        
-        out = (pred_img[-1][0]*255).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-        
-        cv2.imwrite(save_path + name + '.png', out[:,:,::-1])
-            
+        asd = 0
+        for i in pred_img:
+
+            i = torch.clamp(i, 0, 1)
+
+            out = (i[0]*255).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+
+            cv2.imwrite(save_path + name + str(asd) + '.png', out[:,:,::-1])
+            asd += 1
+
 
 def get_parameter_number(net):
     total_num = sum(p.numel() for p in net.parameters())
@@ -62,7 +79,7 @@ def get_parameter_number(net):
 
 
 def main():
-    rec_model_path = './deeperaser.pth'
+    rec_model_path = './deeperaser1.pth'
     img_path = './input_imgs/'
     save_path =  './output_imgs/'
     rec(rec_model_path,img_path,save_path)
