@@ -11,6 +11,7 @@ from tqdm import tqdm
 import warnings
 import matplotlib.pyplot as plt
 import keyboard
+import pandas as pd
 
 warnings.filterwarnings('ignore')
 os.system("cls")
@@ -90,6 +91,7 @@ def show_images(input_images, clean_images, output_images):
 def train_model(model, train_loader, criterion, optimizer, num_epochs, device, save_path):
     model.train()
     pbar = tqdm(range(num_epochs), desc="Training")
+    metadata = pd.DataFrame({"epoch": [], "loss": []})
 
     for epoch in pbar:
         epoch_loss = 0
@@ -119,9 +121,9 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device, s
 
             if keyboard.is_pressed('v'):
                 show_images(images, clean_images, outputs)
-
+        metadata.loc[epoch] = {"epoch": epoch, "loss": epoch_loss / len(train_loader)}
     print("Training completed.")
-    return model
+    return model, metadata
 
 
 def main():
@@ -146,6 +148,8 @@ def main():
                         help='Starting index for dataset. (default: 0)')
     parser.add_argument('--count_items', type=int, default=1000,
                         help='Number of items in the dataset. (default: 1000)')
+    parser.add_argument("--metadata_path", type=str, default="./metadata.csv",
+                        help="training metadata file path (default: ./metadata.csv)")
 
     args = parser.parse_args()
 
@@ -185,10 +189,12 @@ def main():
     model = reload_rec_model(model, args.rec_model_path)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-    trained_model = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device, args.save_model_path)
-
-    torch.save(trained_model.state_dict(), args.save_model_path)
+    try:
+        trained_model, metadata = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device, args.save_model_path)
+        metadata.to_csv(f"{args.metadata_path}")
+        torch.save(trained_model.state_dict(), args.save_model_path)
+    except KeyboardInterrupt as _:
+        "Interrupted, returning not completed model"
 
 
 if __name__ == "__main__":
