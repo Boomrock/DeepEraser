@@ -77,11 +77,12 @@ class BasicMotionEncoder(nn.Module):
 
 
 class BasicUpdateBlock(nn.Module):
-    def __init__(self, hidden_dim=32):
+    def __init__(self, hidden_dim=64):
         super(BasicUpdateBlock, self).__init__()
         self.encoder = BasicMotionEncoder()
-        self.gru = SepConvGRU(hidden_dim=64, input_dim=64+64)
-        self.pre_head = PredHead(64, hidden_dim=128)
+        input_dim = 128
+        self.gru = SepConvGRU(hidden_dim=hidden_dim, input_dim=input_dim)
+        self.pre_head = PredHead(input_dim - hidden_dim, hidden_dim=input_dim)
 
     def forward(self, net, inp, rec_image):
         rec_image_features = self.encoder(rec_image)

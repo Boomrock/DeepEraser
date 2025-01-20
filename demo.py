@@ -62,6 +62,7 @@ def rec(rec_model_path, img_path, save_path):
 
         pred_img = net(im.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda())
         asd = 0
+        print("save")
         for i in pred_img:
 
             i = torch.clamp(i, 0, 1)
@@ -70,6 +71,7 @@ def rec(rec_model_path, img_path, save_path):
 
             cv2.imwrite(save_path + name + str(asd) + '.png', out[:,:,::-1])
             asd += 1
+
 
 
 def get_parameter_number(net):
@@ -82,7 +84,7 @@ def main():
     rec_model_path = './deeperaser1.pth'
     img_path = './input_imgs/'
     save_path =  './output_imgs/'
-    rec(rec_model_path,img_path,save_path)
+    rec(rec_model_path, img_path, save_path)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from model import DeepEraser
 from tqdm import tqdm
 import warnings
 import matplotlib.pyplot as plt
+import keyboard
 
 warnings.filterwarnings('ignore')
 os.system("cls")
@@ -34,7 +35,7 @@ class EraserDataset(Dataset):
             if self.transform:
                 image = self.transform(image)
                 clean_image = self.transform(clean_image)
-                mask = transforms.ToTensor()(mask)
+                mask = self.transform(mask)
 
             self.images.append(image)
             self.clean_images.append(clean_image)
@@ -57,36 +58,6 @@ def reload_rec_model(model, path=""):
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
         return model
-
-
-def train_model(model, train_loader, criterion, optimizer, num_epochs, device):
-    model.train()
-    pbar = tqdm(range(num_epochs), desc="Training")
-
-    for epoch in pbar:
-        epoch_loss = 0
-        for images, clean_images, masks in tqdm(train_loader, leave=False):
-            images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
-
-            optimizer.zero_grad()
-
-            outputs = model(images, masks, iters=epoch % 4 + 1 + 4)
-
-            loss = criterion(outputs[-1], clean_images)
-            epoch_loss += loss.item()
-
-            loss.backward()
-            optimizer.step()
-            pbar.set_postfix(
-                {
-                    'Epoch Loss': f"{epoch_loss / len(train_loader):.6f}",
-                    'Local Loss': f"{loss:.6f}"
-                })
-
-
-
-    print("Training completed.")
-    return model
 
 
 def show_images(input_images, clean_images, output_images):
@@ -114,6 +85,43 @@ def show_images(input_images, clean_images, output_images):
         plt.axis('off')
 
     plt.show()
+
+
+def train_model(model, train_loader, criterion, optimizer, num_epochs, device, save_path):
+    model.train()
+    pbar = tqdm(range(num_epochs), desc="Training")
+
+    for epoch in pbar:
+        epoch_loss = 0
+        batch_counter = 1
+        for images, clean_images, masks in tqdm(train_loader, leave=False):
+            images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
+
+            optimizer.zero_grad()
+
+            outputs = model(images, masks, iters=8)
+            outputs = outputs[-1]
+            loss = criterion(outputs, clean_images)
+            epoch_loss += loss.item()
+
+            loss.backward()
+            optimizer.step()
+            pbar.set_postfix(
+                {
+                    'Epoch Loss': f"{epoch_loss / batch_counter:.6f}",
+                    'Local Loss': f"{loss:.6f}"
+                })
+            batch_counter += 1
+
+            if keyboard.is_pressed('s'):
+                torch.save(model.state_dict(), save_path)
+                print("Модель сохранена.")
+
+            if keyboard.is_pressed('v'):
+                show_images(images, clean_images, outputs)
+
+    print("Training completed.")
+    return model
 
 
 def main():
@@ -153,12 +161,12 @@ def main():
     print(f"Starting Index: {args.start_items}")
     print(f"Count of Items: {args.count_items}")
 
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     transform = transforms.Compose([
+        transforms.Resize((64, 64)),  # Изменение размера на 32x32
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        transforms.Normalize(mean=[0.5], std=[0.5]),
     ])
 
     train_dataset = EraserDataset(
@@ -173,13 +181,12 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
     model = DeepEraser().to(device)
-    model = reload_rec_model(model, args.rec_model_path)
     model = nn.DataParallel(model)
-
-    criterion = nn.SmoothL1Loss()
+    model = reload_rec_model(model, args.rec_model_path)
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    trained_model = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
+    trained_model = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device, args.save_model_path)
 
     torch.save(trained_model.state_dict(), args.save_model_path)
 

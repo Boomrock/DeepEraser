@@ -35,19 +35,16 @@ class DeepEraser(nn.Module):
         rec_image0 = image1
         rec_image = image1
         image_list = []
-        recf_list = []
-        inpf_list = []
+
         for itr in range(iters):
             net, d_rec_image, rec_image_features, inpf = self.update_block(net, inp, rec_image)
-            rec_image = rec_image0 + d_rec_image
+            rec_image = rec_image + d_rec_image
             image_list.append(rec_image)
-            recf_list.append(rec_image_features)
-            inpf_list.append(inpf)
 
         if test_mode:
             return rec_image
 
-        return image_list  
+        return image_list
 
 
 
