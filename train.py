@@ -10,9 +10,11 @@ from model import DeepEraser
 from tqdm import tqdm
 import warnings
 import matplotlib.pyplot as plt
+import pandas as pd
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 os.system("cls")
+
 
 class EraserDataset(Dataset):
     def __init__(self, img_dir, mask_dir, clean_dir, transform=None, start_items=0, count_items=1000):
@@ -20,7 +22,7 @@ class EraserDataset(Dataset):
         self.mask_dir = mask_dir
         self.clean_dir = clean_dir
         self.transform = transform
-        self.image_filenames = os.listdir(img_dir)[start_items:start_items + count_items]
+        self.image_filenames = os.listdir(img_dir)[start_items : start_items + count_items]
 
         self.images = []
         self.clean_images = []
@@ -52,7 +54,7 @@ def reload_rec_model(model, path=""):
         return model
     else:
         model_dict = model.state_dict()
-        pretrained_dict = torch.load(path, map_location='cuda:0')
+        pretrained_dict = torch.load(path, map_location="cuda:0")
         pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
@@ -62,31 +64,30 @@ def reload_rec_model(model, path=""):
 def train_model(model, train_loader, criterion, optimizer, num_epochs, device):
     model.train()
     pbar = tqdm(range(num_epochs), desc="Training")
+    metadata = pd.DataFrame({"epoch": [], "loss": []})
+    try:
+        for epoch in pbar:
+            epoch_loss = 0
+            for images, clean_images, masks in tqdm(train_loader, leave=False):
+                images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
 
-    for epoch in pbar:
-        epoch_loss = 0
-        for images, clean_images, masks in tqdm(train_loader, leave=False):
-            images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
+                optimizer.zero_grad()
 
-            optimizer.zero_grad()
+                outputs = model(images, masks, iters=epoch % 4 + 1 + 4)
 
-            outputs = model(images, masks, iters=epoch % 4 + 1 + 4)
+                loss = criterion(outputs[-1], clean_images)
+                epoch_loss += loss.item()
 
-            loss = criterion(outputs[-1], clean_images)
-            epoch_loss += loss.item()
+                loss.backward()
+                optimizer.step()
+                pbar.set_postfix({"Epoch Loss": f"{epoch_loss / len(train_loader):.6f}", "Local Loss": f"{loss:.6f}"})
+            metadata.loc[epoch] = {"epoch": epoch, "loss": epoch_loss}
 
-            loss.backward()
-            optimizer.step()
-            pbar.set_postfix(
-                {
-                    'Epoch Loss': f"{epoch_loss / len(train_loader):.6f}",
-                    'Local Loss': f"{loss:.6f}"
-                })
-
-
-
-    print("Training completed.")
-    return model
+        print("Training completed.")
+    except KeyboardInterrupt as _:
+        "Interrupted, returning not completed model"
+    finally:
+        return model, metadata
 
 
 def show_images(input_images, clean_images, output_images):
@@ -101,43 +102,34 @@ def show_images(input_images, clean_images, output_images):
         plt.subplot(3, num_images, i + 1)
         plt.imshow(input_images[i].transpose(1, 2, 0))
         plt.title("Input Image")
-        plt.axis('off')
+        plt.axis("off")
 
         plt.subplot(3, num_images, i + 1 + num_images)
         plt.imshow(clean_images[i].transpose(1, 2, 0))
         plt.title("Clean Image")
-        plt.axis('off')
+        plt.axis("off")
 
         plt.subplot(3, num_images, i + 1 + 2 * num_images)
         plt.imshow(output_images[i].transpose(1, 2, 0))
         plt.title("Output Image")
-        plt.axis('off')
+        plt.axis("off")
 
     plt.show()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Training DeepEraser model.")
-    parser.add_argument('--img_dir', type=str, default='./train_data/Text',
-                        help='Path to text images. (default: ./train_data/Text)')
-    parser.add_argument('--mask_dir', type=str, default='./train_data/Mask',
-                        help='Path to mask images. (default: ./train_data/Mask)')
-    parser.add_argument('--clean_dir', type=str, default='./train_data/Clear',
-                        help='Path to clean images. (default: ./train_data/Clear)')
-    parser.add_argument('--save_model_path', type=str, default='./deeperaser1.pth',
-                        help='Path to save the model. (default: ./deeperaser1.pth)')
-    parser.add_argument('--rec_model_path', type=str, default='./deeperaser.pth',
-                        help='Path to a pretrained model. (default: ./deeperaser.pth)')
-    parser.add_argument('--batch_size', type=int, default=6,
-                        help='Batch size for training. (default: 6)')
-    parser.add_argument('--learning_rate', type=float, default=5e-6,
-                        help='Learning rate. (default: 5e-6)')
-    parser.add_argument('--num_epochs', type=int, default=4,
-                        help='Number of training epochs. (default: 4)')
-    parser.add_argument('--start_items', type=int, default=0,
-                        help='Starting index for dataset. (default: 0)')
-    parser.add_argument('--count_items', type=int, default=1000,
-                        help='Number of items in the dataset. (default: 1000)')
+    parser.add_argument("--img_dir", type=str, default="./train_data/Text", help="Path to text images. (default: ./train_data/Text)")
+    parser.add_argument("--mask_dir", type=str, default="./train_data/Mask", help="Path to mask images. (default: ./train_data/Mask)")
+    parser.add_argument("--clean_dir", type=str, default="./train_data/Clear", help="Path to clean images. (default: ./train_data/Clear)")
+    parser.add_argument("--save_model_path", type=str, default="./deeperaser1.pth", help="Path to save the model. (default: ./deeperaser1.pth)")
+    parser.add_argument("--rec_model_path", type=str, default="./deeperaser.pth", help="Path to a pretrained model. (default: ./deeperaser.pth)")
+    parser.add_argument("--batch_size", type=int, default=6, help="Batch size for training. (default: 6)")
+    parser.add_argument("--learning_rate", type=float, default=5e-6, help="Learning rate. (default: 5e-6)")
+    parser.add_argument("--num_epochs", type=int, default=4, help="Number of training epochs. (default: 4)")
+    parser.add_argument("--start_items", type=int, default=0, help="Starting index for dataset. (default: 0)")
+    parser.add_argument("--count_items", type=int, default=1000, help="Number of items in the dataset. (default: 1000)")
+    parser.add_argument("--metadata_path", type=str, default="./metadata.csv", help="training metadata file path")
 
     args = parser.parse_args()
 
@@ -152,14 +144,16 @@ def main():
     print(f"Number of Epochs: {args.num_epochs}")
     print(f"Starting Index: {args.start_items}")
     print(f"Count of Items: {args.count_items}")
+    print(f"Metadata filepath: {args.metadata_path}")
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-    ])
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
 
     train_dataset = EraserDataset(
         img_dir=args.img_dir,
@@ -167,7 +161,7 @@ def main():
         clean_dir=args.clean_dir,
         transform=transform,
         start_items=args.start_items,
-        count_items=args.count_items
+        count_items=args.count_items,
     )
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -178,8 +172,8 @@ def main():
 
     criterion = nn.SmoothL1Loss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-    trained_model = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
+    trained_model, metadata = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
+    metadata.to_csv(f"{args.metadata_path}")
 
     torch.save(trained_model.state_dict(), args.save_model_path)
 
