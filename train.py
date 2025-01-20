@@ -96,6 +96,7 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device, s
     for epoch in pbar:
         epoch_loss = 0
         batch_counter = 1
+        metadata_counter = 0
         for images, clean_images, masks in tqdm(train_loader, leave=False):
             images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
 
@@ -114,6 +115,9 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device, s
                     'Local Loss': f"{loss:.6f}"
                 })
             batch_counter += 1
+            if batch_counter % int(len(train_loader) / 10) == 0:
+                metadata.loc[metadata_counter] = {"epoch": epoch, "loss": epoch_loss / len(train_loader)}
+                metadata_counter += 1
 
             if keyboard.is_pressed('s'):
                 torch.save(model.state_dict(), save_path)
@@ -121,7 +125,10 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device, s
 
             if keyboard.is_pressed('v'):
                 show_images(images, clean_images, outputs)
-        metadata.loc[epoch] = {"epoch": epoch, "loss": epoch_loss / len(train_loader)}
+
+            if keyboard.is_pressed('e'):
+                return model, metadata
+
     print("Training completed.")
     return model, metadata
 
