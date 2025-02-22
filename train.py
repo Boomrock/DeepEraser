@@ -178,7 +178,7 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
 
-    trained_model, metadata = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device, args.save_model_path)
+    trained_model, metadata = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
     metadata.to_csv(f"{args.metadata_path}")
     torch.save(trained_model.state_dict(), args.save_model_path)
 
