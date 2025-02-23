@@ -8,11 +8,11 @@ import torch.nn as nn
 class DeepEraser(nn.Module):
     def __init__(self):
         super(DeepEraser, self).__init__()
-        self.hidden_dim = 64
-        self.context_dim = 64
+        self.hidden_dim = 128
+        self.context_dim = 128
 
-        self.fnet = BasicEncoder(output_dim=128, norm_fn="instance")
-        self.update_block = BasicUpdateBlock(hidden_dim=64)
+        self.fnet = BasicEncoder(output_dim= self.hidden_dim + self.context_dim, norm_fn="instance")
+        self.update_block = BasicUpdateBlock(hidden_dim=self.hidden_dim, input_dim=self.hidden_dim + self.context_dim)
 
     def freeze_bn(self):
         for m in self.modules():
@@ -34,7 +34,6 @@ class DeepEraser(nn.Module):
         rec_image0 = image1
         rec_image = image1
         image_list = []
-
         for _ in range(iters):
             net, d_rec_image, _, _ = self.update_block(net, inp, rec_image)
             rec_image = rec_image0 + d_rec_image

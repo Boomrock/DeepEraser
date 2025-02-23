@@ -101,9 +101,9 @@ class BasicEncoder(nn.Module):
         self.layer3 = self._make_layer(32, stride=1)
         self.layer4 = self._make_layer(64, stride=1)
         self.layer5 = self._make_layer(64, stride=1)
-        self.layer6 = self._make_layer(128, stride=1)
+        self.layer6 = self._make_layer(256, stride=1)
 
-        self.conv2 = nn.Conv2d(128, output_dim, kernel_size=1)
+        self.conv2 = nn.Conv2d(256, output_dim, kernel_size=1)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):

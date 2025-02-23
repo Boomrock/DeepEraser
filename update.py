@@ -64,10 +64,10 @@ class SepConvGRU(nn.Module):
 
 
 class BasicMotionEncoder(nn.Module):
-    def __init__(self):
+    def __init__(self, out = 61):
         super(BasicMotionEncoder, self).__init__()
         self.convf1 = nn.Conv2d(3, 128, 7, padding=3)
-        self.convf2 = nn.Conv2d(128, 64-3, 3, padding=1)
+        self.convf2 = nn.Conv2d(128, out, 3, padding=1)
 
     def forward(self, flow):
         flo = F.relu(self.convf1(flow))
@@ -77,10 +77,9 @@ class BasicMotionEncoder(nn.Module):
 
 
 class BasicUpdateBlock(nn.Module):
-    def __init__(self, hidden_dim=64):
+    def __init__(self, hidden_dim=64, input_dim=128):
         super(BasicUpdateBlock, self).__init__()
-        self.encoder = BasicMotionEncoder()
-        input_dim = 128
+        self.encoder = BasicMotionEncoder(out=hidden_dim - 3)
         self.gru = SepConvGRU(hidden_dim=hidden_dim, input_dim=input_dim)
         self.pre_head = PredHead(input_dim - hidden_dim, hidden_dim=input_dim)
 
