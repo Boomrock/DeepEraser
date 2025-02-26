@@ -86,13 +86,14 @@ def generate_images(n, width, height, text_length, font_path, font_size_range, p
 
 
 
-        text_color_choice = random.choice(['dark', 'white'])
+        text_color_choice = random.choice(['dark'])
         if text_color_choice == 'dark':
             text_color = random.randint(0, 30)  # Тёмный текст
             outline_color = (255, 255, 255)  # Белая обводка
         else:
             text_color = random.randint(230, 255)  # Белый текст
             outline_color = (0, 0, 0)  # Белая обводка
+
         if random.randint(0, len(random_texts)) == 0:
 
             position = (random.randint(-font_size * 3, width - font_size * 2), random.randint(0 - font_size * 2, height))
@@ -140,7 +141,7 @@ def main():
     args = parser.parse_args()
 
     filenames = os.listdir(args.manga_path)
-    images = [Image.open(os.path.join(args.manga_path, file)) for file in filenames]
+    images = [Image.open(os.path.join(args.manga_path, file)).convert('RGB') for file in filenames]
 
     generate_images(
         args.count,

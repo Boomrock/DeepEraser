@@ -6,24 +6,25 @@ import numpy as np
 import cv2
 from PIL import Image
 import warnings
-
+from torchvision import transforms
+import os
 
 warnings.filterwarnings('ignore')
 
 
 def reload_rec_model(model, path=""):
-    if not bool(path):
+    if not path or not os.path.exists(path):
         return model
-    else:
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(path, map_location='cuda:0')
-        print(len(pretrained_dict.keys()))
-        pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
-        print(len(pretrained_dict.keys()))
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(model_dict)
+    checkpoint = torch.load(path, map_location="cuda:0")
+    state_dict = checkpoint['model_state_dict']
+    # Убираем префикс 'module.' если модель обучалась с DataParallel
 
-        return model
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        name = k[7:] if k.startswith('module.') else k
+        new_state_dict[name] = v
+    model.load_state_dict(new_state_dict, strict=False)
+    return model
 
 
 def rec(rec_model_path, img_path, save_path):
@@ -38,29 +39,23 @@ def rec(rec_model_path, img_path, save_path):
     net.eval()
 
     # Задайте новый размер
-    new_size = (600, 800)  # Замените width и height на нужные значения
 
     # Загрузка изображения и маски
     img = Image.open(img_path + 'input.png').convert('RGB')  # Убираем альфа-канал
     mask = Image.open(img_path + 'mask.png').convert('L')  # Преобразуем маску в градации серого
 
-    # Уменьшение размера
-    img = img.resize(new_size, Image.LANCZOS)  # Изменяем размер изображения
-    mask = mask.resize(new_size, Image.LANCZOS)  # Изменяем размер маски (используем NEAREST для маски)
-
-    # Преобразование в numpy массивы
-    img = np.array(img)[:, :, :3]  # Убедитесь, что только RGB каналы
-    mask = np.array(mask)[:, :]  # Маска без изменений
-
-    # Преобразование в тензоры PyTorch
-    im = torch.from_numpy(img / 255.0).permute(2, 0, 1).float()
-    mask = torch.from_numpy(mask / 255.0).unsqueeze(0).float()
-
+    transform = transforms.Compose([
+        transforms.Resize((64, 64)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
+    ])
+    img = transform(img)
+    mask = transform(mask)
     with torch.no_grad():
 
         name = 'output'
 
-        pred_img = net(im.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda())
+        pred_img = net(img.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda())
         asd = 0
         print("save")
         for i in pred_img:

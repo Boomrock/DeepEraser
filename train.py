@@ -50,17 +50,20 @@ class EraserDataset(Dataset):
         return self.images[idx], self.clean_images[idx], self.masks[idx]
 
 
-def reload_rec_model(model, path=""):
-    if not path:
+def reload_rec_model(model, optimizer, path=""):
+    if not path or not os.path.exists(path):
         return model
-    else:
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(path, map_location="cuda:0")
-        pretrained_dict = {k[7:]: v for k, v in pretrained_dict.items() if k[7:] in model_dict}
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(model_dict)
-        return model
+    checkpoint = torch.load(path, map_location="cuda:0")
+    state_dict = checkpoint['model_state_dict']
+    # Убираем префикс 'module.' если модель обучалась с DataParallel
 
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        name = k[7:] if k.startswith('module.') else k
+        new_state_dict[name] = v
+    model.load_state_dict(new_state_dict, strict=False)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model, optimizer
 
 def show_images(input_images, clean_images, output_images):
     input_images = input_images.cpu().detach().numpy()
@@ -97,6 +100,7 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device):
         for epoch in pbar:
             epoch_loss = 0
             batch_counter = 1
+
             for images, clean_images, masks in tqdm(train_loader, leave=False):
                 images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
 
@@ -110,11 +114,14 @@ def train_model(model, train_loader, criterion, optimizer, num_epochs, device):
                 loss.backward()
                 optimizer.step()
                 pbar.set_postfix({"Epoch Loss": f"{epoch_loss / batch_counter:.6f}", "Local Loss": f"{loss:.6f}"})
+
                 batch_counter += 1
 
                 if keyboard.is_pressed("v"):
                     show_images(images, clean_images, outputs)
-            metadata.loc[epoch] = {"epoch": epoch, "loss": epoch_loss / len(train_loader)}
+
+            metadata.loc[epoch] = {"epoch": epoch, "loss": epoch_loss / batch_counter}
+
     except KeyboardInterrupt as _:
         print("Interrupted, returning not completed model")
     except Exception as e:
@@ -153,13 +160,11 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize((64, 64)),  # Изменение размера на 32x32
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5]),
-        ]
-    )
+    transform = transforms.Compose([
+        transforms.Resize((64, 64)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
+    ])
 
     train_dataset = EraserDataset(
         img_dir=args.img_dir,
@@ -173,15 +178,20 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
 
     model = DeepEraser().to(device)
-    model = nn.DataParallel(model)
-    model = reload_rec_model(model, args.rec_model_path)
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+
+    model, optimizer = reload_rec_model(model, optimizer, args.rec_model_path)
+
+    model = nn.DataParallel(model)
 
     trained_model, metadata = train_model(model, train_loader, criterion, optimizer, args.num_epochs, device)
     metadata.to_csv(f"{args.metadata_path}")
-    torch.save(trained_model.state_dict(), args.save_model_path)
-
+    torch.save(model.module.state_dict(), args.save_model_path)  # Сохраняем без префикса
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+    }, args.save_model_path)
 
 if __name__ == "__main__":
     main()

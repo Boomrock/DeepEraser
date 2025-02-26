@@ -10,6 +10,7 @@ def plot_train_loss(filename):
             raise ValueError("File should contain 'epoch' and 'loss' columns")
 
         plt.figure(figsize=(10, 6))
+
         plt.plot(df["epoch"], df["loss"], marker="o")
 
         plt.title("Training Loss Over Epochs")
