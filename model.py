@@ -11,8 +11,8 @@ class DeepEraser(nn.Module):
         self.hidden_dim = 128
         self.context_dim = 128
 
-        self.fnet = BasicEncoder(output_dim= self.hidden_dim + self.context_dim, norm_fn="instance")
-        self.update_block = BasicUpdateBlock(hidden_dim=self.hidden_dim, input_dim=self.hidden_dim + self.context_dim)
+        self.fnet = BasicEncoder(in_dim=2, output_dim=self.hidden_dim + self.context_dim, norm_fn="instance")
+        self.update_block = BasicUpdateBlock(channels=1, hidden_dim=self.hidden_dim, input_dim=self.hidden_dim + self.context_dim)
 
     def freeze_bn(self):
         for m in self.modules():
@@ -21,7 +21,6 @@ class DeepEraser(nn.Module):
 
     def forward(self, image1, mask, iters=8, test_mode=False):
         image1 = image1.contiguous()
-
         image2 = torch.cat([image1, mask], dim=1)
         hdim = self.hidden_dim
         cdim = self.context_dim

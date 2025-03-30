@@ -5,13 +5,14 @@ import matplotlib.pyplot as plt
 def plot_train_loss(filename):
     try:
         df = pd.read_csv(filename)
-        required_columns = ["epoch", "loss"]
+        required_columns = ["epoch", "train_loss"]
         if not all(col in df.columns for col in required_columns):
             raise ValueError("File should contain 'epoch' and 'loss' columns")
 
         plt.figure(figsize=(10, 6))
 
-        plt.plot(df["epoch"], df["loss"], marker="o")
+        plt.plot(df["epoch"], df["train_loss"], marker="o")
+        plt.plot(df["epoch"], df["val_loss"], marker="o")
 
         plt.title("Training Loss Over Epochs")
         plt.xlabel("Epoch")

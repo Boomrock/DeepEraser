@@ -7,9 +7,40 @@ import cv2
 from PIL import Image
 import warnings
 from torchvision import transforms
+import matplotlib.pyplot as plt
 import os
 
 warnings.filterwarnings('ignore')
+
+
+def show_images(input_images, clean_images, output_images):
+    # Преобразуем все изображения в numpy массивы
+    input_images = input_images.cpu().detach().numpy()
+    clean_images = clean_images.cpu().detach().numpy()
+
+    # Преобразуем список выходных изображений в numpy массив
+    output_images = [output_image.squeeze(0).cpu().detach().numpy() for output_image in output_images]
+
+    num_images = len(output_images)
+    plt.figure(figsize=(15, 5))
+
+    for i in range(num_images - 1 , num_images):
+        plt.subplot(1, 3, 1)
+        plt.imshow(input_images.squeeze(0), cmap='gray')  # Удаляем размерность канала
+        plt.title("Input Image")
+        plt.axis("off")
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(clean_images.squeeze(0), cmap='gray')  # Удаляем размерность канала
+        plt.title("Clean Image")
+        plt.axis("off")
+
+        plt.subplot(1, 3, 3)
+        plt.imshow(output_images[i].squeeze(0), cmap='gray')  # Удаляем размерность канала
+        plt.title("Output Image")
+        plt.axis("off")
+
+    plt.show()
 
 
 def reload_rec_model(model, path=""):
@@ -41,11 +72,11 @@ def rec(rec_model_path, img_path, save_path):
     # Задайте новый размер
 
     # Загрузка изображения и маски
-    img = Image.open(img_path + 'input.png').convert('RGB')  # Убираем альфа-канал
+    img = Image.open(img_path + 'input.png').convert('L')  # Убираем альфа-канал
     mask = Image.open(img_path + 'mask.png').convert('L')  # Преобразуем маску в градации серого
-
+    print(img.size[0])
+    print(img.size[1])
     transform = transforms.Compose([
-        transforms.Resize((64, 64)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5], std=[0.5])
     ])
@@ -55,9 +86,10 @@ def rec(rec_model_path, img_path, save_path):
 
         name = 'output'
 
-        pred_img = net(img.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda())
+        pred_img = net(img.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda(), iters=16)
         asd = 0
         print("save")
+        show_images(img, mask, pred_img)
         for i in pred_img:
 
             i = torch.clamp(i, 0, 1)
@@ -76,7 +108,7 @@ def get_parameter_number(net):
 
 
 def main():
-    rec_model_path = './deeperaser1.pth'
+    rec_model_path = './deeperaser.pth'
     img_path = './input_imgs/'
     save_path =  './output_imgs/'
     rec(rec_model_path, img_path, save_path)
