@@ -1,7 +1,6 @@
 from model import DeepEraser
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import cv2
 from PIL import Image
@@ -9,39 +8,31 @@ import warnings
 from torchvision import transforms
 import matplotlib.pyplot as plt
 import os
+from generator_train_data import generate_noise_mask
 
 warnings.filterwarnings('ignore')
 
-
 def show_images(input_images, clean_images, output_images):
-    # Преобразуем все изображения в numpy массивы
-    input_images = input_images.cpu().detach().numpy()
-    clean_images = clean_images.cpu().detach().numpy()
+    input_images = input_images.squeeze().cpu().detach().numpy()
+    clean_images = clean_images.squeeze().cpu().detach().numpy()
+    output_images = [img.squeeze().cpu().detach().numpy() for img in output_images]
 
-    # Преобразуем список выходных изображений в numpy массив
-    output_images = [output_image.squeeze(0).cpu().detach().numpy() for output_image in output_images]
-
-    num_images = len(output_images)
     plt.figure(figsize=(15, 5))
+    plt.subplot(131)
+    plt.imshow(input_images.transpose(1, 2, 0))
+    plt.title("Input Image")
+    plt.axis("off")
 
-    for i in range(num_images - 1 , num_images):
-        plt.subplot(1, 3, 1)
-        plt.imshow(input_images.squeeze(0), cmap='gray')  # Удаляем размерность канала
-        plt.title("Input Image")
-        plt.axis("off")
+    plt.subplot(132)
+    plt.imshow(clean_images.transpose(1, 2, 0))
+    plt.title("Clean Image")
+    plt.axis("off")
 
-        plt.subplot(1, 3, 2)
-        plt.imshow(clean_images.squeeze(0), cmap='gray')  # Удаляем размерность канала
-        plt.title("Clean Image")
-        plt.axis("off")
-
-        plt.subplot(1, 3, 3)
-        plt.imshow(output_images[i].squeeze(0), cmap='gray')  # Удаляем размерность канала
-        plt.title("Output Image")
-        plt.axis("off")
-
+    plt.subplot(133)
+    plt.imshow(output_images[-1].transpose(1, 2, 0))
+    plt.title("Output Image")
+    plt.axis("off")
     plt.show()
-
 
 def reload_rec_model(model, path=""):
     if not path or not os.path.exists(path):
@@ -56,63 +47,61 @@ def reload_rec_model(model, path=""):
         new_state_dict[name] = v
     model.load_state_dict(new_state_dict, strict=False)
     return model
-
-
 def rec(rec_model_path, img_path, save_path):
-    # print(torch.__version__)
-
-
+    os.makedirs(save_path, exist_ok=True)
     net = DeepEraser().cuda()
-
-
-    reload_rec_model(net, rec_model_path)
-
+    net = reload_rec_model(net, rec_model_path)
     net.eval()
 
-    # Задайте новый размер
+    # Загрузка и масштабирование изображений
+    img = Image.open(os.path.join(img_path, 'input.png')).convert('RGBA')
+    mask = Image.open(os.path.join(img_path, 'mask.png')).convert('L')
 
-    # Загрузка изображения и маски
-    img = Image.open(img_path + 'input.png').convert('L')  # Убираем альфа-канал
-    mask = Image.open(img_path + 'mask.png').convert('L')  # Преобразуем маску в градации серого
-    print(img.size[0])
-    print(img.size[1])
+    # Масштабирование до 64x64
+    img_resized = img.resize((64, 64))
+    mask_resized = mask.resize((64, 64))
+
+    # Генерация шума нужного размера
+    noise = generate_noise_mask(64, 64, alpha=1)
+
+    # Обработка альфа-канала шума по маске
+    mask_array = np.array(mask_resized)
+    noise_array = np.array(noise)
+    noise_alpha_channel = noise_array[:, :, 3]
+    combined_alpha = np.minimum(noise_alpha_channel, mask_array)
+    noise_array[:, :, 3] = combined_alpha
+    noise_image = Image.fromarray(noise_array, mode='RGBA')
+
+    # Наложение шума через альфа-композит
+    final_image = Image.alpha_composite(img_resized, noise_image).convert('RGB')
+
+    # Преобразования для нейросети
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5])
+        lambda x: x.clamp(0, 1)
     ])
-    img = transform(img)
-    mask = transform(mask)
+
+    mask_tensor = transform(mask_resized).round()
+    img_tensor = transform(final_image)
+
     with torch.no_grad():
+        pred_imgs = net(
+            img_tensor.unsqueeze(0).cuda(),
+            mask_tensor.unsqueeze(0).cuda())
 
-        name = 'output'
+        for i, pred in enumerate(pred_imgs):
+            pred = torch.clamp(pred, 0, 1)
+            out = (pred[0].cpu().numpy() * 255).astype(np.uint8)
+            Image.fromarray(out).save(os.path.join(save_path, f'output_{i}.png'))
 
-        pred_img = net(img.unsqueeze(0).cuda(), mask.unsqueeze(0).cuda(), iters=16)
-        asd = 0
-        print("save")
-        show_images(img, mask, pred_img)
-        for i in pred_img:
-
-            i = torch.clamp(i, 0, 1)
-
-            out = (i[0]*255).permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-
-            cv2.imwrite(save_path + name + str(asd) + '.png', out[:,:,::-1])
-            asd += 1
-
-
-
-def get_parameter_number(net):
-    total_num = sum(p.numel() for p in net.parameters())
-    trainable_num = sum(p.numel() for p in net.parameters() if p.requires_grad)
-    return {'Total': total_num, 'Trainable': trainable_num}
-
+    show_images(img_tensor, transform(img_resized), pred_imgs.cpu())
 
 def main():
-    rec_model_path = './deeperaser.pth'
-    img_path = './input_imgs/'
-    save_path =  './output_imgs/'
-    rec(rec_model_path, img_path, save_path)
-
+    rec(
+        rec_model_path='./deeperaser.pth',
+        img_path='./input_imgs/',
+        save_path='./output_imgs/'
+    )
 
 if __name__ == "__main__":
     main()

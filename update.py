@@ -91,4 +91,4 @@ class BasicUpdateBlock(nn.Module):
         net = self.gru(net, inp)   # net是hidden state，inp是fk-1
         drec_image = self.pre_head(net)
 
-        return net, drec_image, rec_image_features, inp
+        return net, drec_image

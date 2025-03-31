@@ -44,9 +44,9 @@ class EraserDataset(Dataset):
     def __getitem__(self, idx):
         img_name = self.image_filenames[idx]
 
-        image = Image.open(os.path.join(self.img_dir, img_name)).convert("L")
+        image = Image.open(os.path.join(self.img_dir, img_name)).convert("RGB")
         mask = Image.open(os.path.join(self.mask_dir, img_name)).convert("L")
-        clean = Image.open(os.path.join(self.clean_dir, img_name)).convert("L")
+        clean = Image.open(os.path.join(self.clean_dir, img_name)).convert("RGB")
 
         if self.transform:
             image = self.transform(image)
@@ -112,8 +112,8 @@ def validate_model(model, val_loader, criterion, device):
     with torch.no_grad():
         for images, clean_images, masks in val_loader:
             images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
-            outputs = model(images, masks, iters=8)[-1]
-            loss = criterion(outputs, clean_images)
+            outputs = model(images, masks)
+            loss = criterion(outputs, clean_images, masks)
             val_loss += loss.item()
     return val_loss / len(val_loader)
 def show_images(input_images, clean_images, output_images):
@@ -126,12 +126,12 @@ def show_images(input_images, clean_images, output_images):
 
     for i in range(num_images):
         plt.subplot(3, num_images, i + 1)
-        plt.imshow(input_images[i].transpose(1, 2, 0))
+        plt.imshow(input_images[i].transpose(1, 2, 0),  cmap='gray')
         plt.title("Input Image")
         plt.axis("off")
 
         plt.subplot(3, num_images, i + 1 + num_images)
-        plt.imshow(clean_images[i].transpose(1, 2, 0))
+        plt.imshow(clean_images[i].transpose(1, 2, 0),  cmap='gray')
         plt.title("Clean Image")
         plt.axis("off")
 
@@ -163,8 +163,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         for images, clean_images, masks in tqdm(train_loader, leave=False, desc="Train"):
             images, masks, clean_images = images.to(device), masks.to(device), clean_images.to(device)
             optimizer.zero_grad()
-            outputs = model(images, masks, iters=8)[-1]
-            loss = criterion(outputs, clean_images)
+            outputs = model(images, masks)
+            loss = criterion(outputs, clean_images, masks)
             loss.backward()
             optimizer.step()
             train_epoch_loss += loss.item()
@@ -202,6 +202,42 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         return model, metadata
 
 
+class MaskedL1Loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, pred, target, mask):
+        # Применяем маску к разнице между предсказанием и целью
+        masked_diff = torch.abs(pred - target) * mask
+        mse_loss = masked_mse_loss(pred, target, mask)
+        # Среднее значение ошибки только по маскированным пикселям
+        loss = masked_diff.sum() / (mask.sum() + 1e-8)  # +1e-8 для избежания деления на ноль
+        return loss + 0.1 * mse_loss
+
+
+def masked_mse_loss(input, target, mask):
+    """
+    MSE Loss только для областей, указанных маской (mask=1).
+    :param input: Тензор предсказаний [batch_size, channels, height, width]
+    :param target: Тензор целевых данных [batch_size, channels, height, width]
+    :param mask: Тензор маски [batch_size, 1, height, width] (0 или 1)
+    :return: Среднее MSE по маске
+    """
+    # Расширяем маску до размерности входных тензоров (добавляем каналы)
+    mask = mask.expand_as(input)
+
+    # Умножаем разницу на маску, чтобы оставить только пиксели с mask=1
+    diff = (input - target) * mask
+    squared_diff = torch.pow(diff, 2)
+
+    # Считаем сумму квадратов и делим на количество активных пикселей (чтобы избежать деления на ноль)
+    valid_pixels = torch.sum(mask)
+    if valid_pixels == 0:
+        return torch.tensor(0.0, device=input.device)
+    loss = torch.sum(squared_diff) / valid_pixels
+    return loss
+
 def main():
     parser = argparse.ArgumentParser(description="Training DeepEraser model.")
     parser.add_argument("--img_dir", type=str, default="./train_data/Text",
@@ -214,15 +250,15 @@ def main():
                         help="Path to save the model (default: ./deeperaser.pth)")
     parser.add_argument("--rec_model_path", type=str, default="./deeperaser.pth",
                     help="Path to save the model (default: ./deeperaser.pth)")
-    parser.add_argument("--batch_size", type=int, default=6,
-                        help="Batch size for training (default: 6)")
-    parser.add_argument("--learning_rate", type=float, default=5e-6,
+    parser.add_argument("--batch_size", type=int, default=4,
+                        help="Batch size for training (default: 4)")
+    parser.add_argument("--lr", type=float, default=5e-6,
                         help="Learning rate (default: 5e-6)")
     parser.add_argument("--num_epochs", type=int, default=4,
                         help="Number of training epochs (default: 4)")
     parser.add_argument("--count", type=int, default=1000,
                         help="count of image (default: 1000)")
-    parser.add_argument("--validation_split", type=float, default=0.2,
+    parser.add_argument("--validation_split", type=float, default=0.1,
                         help="Validation split proportion (default: 0.2)")
     parser.add_argument("--metadata_path", type=str, default="./metadata.csv",
                         help="Training metadata file path (default: ./metadata.csv)")
@@ -234,7 +270,7 @@ def main():
     print(f"Save Model Path: {args.save_model_path}")
     print(f"Pretrained Model Path: {args.rec_model_path}")
     print(f"Batch Size: {args.batch_size}")
-    print(f"Learning Rate: {args.learning_rate}")
+    print(f"Learning Rate: {args.lr}")
     print(f"count of images: {args.count}")
     print(f"Number of Epochs: {args.num_epochs}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -242,7 +278,7 @@ def main():
     transform = transforms.Compose([
         transforms.Resize((64, 64)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5])
+        lambda x: x.clamp(0, 1)  # Защита от выхода за границы
     ])
 
     # Создаем загрузчики данных
@@ -257,10 +293,10 @@ def main():
     )
 
     model = DeepEraser().to(device)
-    criterion = nn.L1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-    model, optimizer = reload_rec_model(model, optimizer, args.rec_model_path)
+    criterion = MaskedL1Loss()
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    if args.rec_model_path != "new":
+        model, optimizer = reload_rec_model(model, optimizer, args.rec_model_path)
     model = nn.DataParallel(model)
 
     # Обучение с валидацией
@@ -272,7 +308,7 @@ def main():
         optimizer=optimizer,
         num_epochs=args.num_epochs,
         device=device,
-        metadata_path = args.metadata_path
+        metadata_path=args.metadata_path
     )
 
     # Сохранение результатов
